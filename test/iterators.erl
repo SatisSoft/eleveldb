@@ -52,7 +52,21 @@ prev_test() ->
         ?assertEqual({error, invalid_iterator}, eleveldb:iterator_move(I4, prefetch, 2)),
       
       ?assertEqual([<<"cz">>, <<"by">>, <<"ax">>], eleveldb:fold(Ref, fun({K,V}, Acc) -> [<<K/binary, V/binary>>|Acc] end, [], [], 2)),
-      ?assertEqual([<<"cz">>, <<"by">>, <<"ax">>], eleveldb:fold(Ref, fun({K,V}, Acc) -> [<<K/binary, V/binary>>|Acc] end, [], [], 20))
+      ?assertEqual([<<"cz">>, <<"by">>, <<"ax">>], eleveldb:fold(Ref, fun({K,V}, Acc) -> [<<K/binary, V/binary>>|Acc] end, [], [], 20)),
+      SmartFoldFun = fun
+              ({K, V}, Acc) when length(Acc) =:= 1->
+                  {next_key, <<"a">>, [<<K/binary, V/binary>>|Acc]};
+              ({K,V}, Acc) ->
+                  [<<K/binary, V/binary>>|Acc]
+          end,
+      ?assertEqual([<<"cz">>,<<"by">>,<<"ax">>,<<"by">>,<<"ax">>], eleveldb:fold(Ref, SmartFoldFun, [], [], 20)),
+
+       {ok, I5} = eleveldb:iterator(Ref, []),
+        ?assertEqual({ok, [{<<"a">>, <<"x">>}]},eleveldb:iterator_move(I5, <<>> , 20)),
+        ?assertEqual({ok, [{<<"b">>, <<"y">>}, {<<"c">>, <<"z">>}]}, eleveldb:iterator_move(I5, prefetch, 20)),
+        ?assertEqual({ok, [{<<"a">>, <<"x">>}]},eleveldb:iterator_move(I5, <<"a">> , 20)),
+        ?assertEqual({ok, [{<<"b">>, <<"y">>}, {<<"c">>, <<"z">>}]}, eleveldb:iterator_move(I5, prefetch, 20))
+
     after
       eleveldb:close(Ref)
     end.
