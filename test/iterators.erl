@@ -56,3 +56,18 @@ prev_test() ->
     after
       eleveldb:close(Ref)
     end.
+
+return_from_nowhere() ->
+    os:cmd("rm -rf ltest"),  % NOTE
+    {ok, Ref} = eleveldb:open("ltest", [{create_if_missing, true}]),
+    try
+        eleveldb:put(Ref, <<"a">>, <<"x">>, []),
+        eleveldb:put(Ref, <<"b">>, <<"y">>, []),
+        {ok, I} = eleveldb:iterator(Ref, []),
+        ?assertEqual({ok, [{<<"a">>, <<"x">>}]},eleveldb:iterator_move(I, <<>> , 1)),
+        ?assertEqual({ok, [{<<"b">>, <<"y">>}]}, eleveldb:iterator_move(I, next, 10)),
+        ?assertEqual({error, invalid_iterator}, eleveldb:iterator_move(I, next, 2)),
+        ?assertEqual({ok, [{<<"a">>, <<"x">>}]},eleveldb:iterator_move(I, <<>> , 1))
+    after
+        eleveldb:close(Ref)
+    end.
