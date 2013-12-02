@@ -357,13 +357,15 @@ fold_loop({error, invalid_iterator}, _Itr, _Fun, Acc0, _) ->
     Acc0;
 
 fold_loop({ok, KVList}, Itr, Fun, Acc0, BatchSize) when is_list(KVList)->
-    {Next, Acc} = case fold_chunk(Fun, Acc0, KVList) of
-                      {'next_key', Key, Acc1} ->
-                          {Key, Acc1};
+    {Next, FunNext, Acc} = case fold_chunk(Fun, Acc0, KVList) of
+                      {'next_key', Key, FunNext1, Acc1} ->
+                          {Key, FunNext1, Acc1};
+                      {'next_key', Key, Acc2} ->
+                          {Key, Fun, Acc2};
                       SomeAcc ->
-                          {prefetch, SomeAcc}
+                          {prefetch, Fun, SomeAcc}
                   end,
-    fold_loop(eleveldb:iterator_move(Itr, Next, BatchSize), Itr, Fun, Acc, BatchSize).
+    fold_loop(eleveldb:iterator_move(Itr, Next, BatchSize), Itr, FunNext, Acc, BatchSize).
 
 fold_chunk(_Fun, Acc0, []) ->
     Acc0;
