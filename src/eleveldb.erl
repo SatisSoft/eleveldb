@@ -373,6 +373,8 @@ fold_chunk(Fun, Acc0, [H|Tail]) ->
     case Fun(H, Acc0) of
         {'next_key', _Key, _Acc} = V->
             V;
+        {'next_key', _Key,_FunNext, _Acc} = V->
+            V;
         Acc ->
             fold_chunk(Fun, Acc, Tail)
     end.
