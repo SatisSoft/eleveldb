@@ -95,7 +95,7 @@ batch_read_jump() ->
         [{K1, _}|_] = lists:dropwhile(fun (_X) -> random:uniform() > 0.7 end, Data),
         [{K2, _}|_] = lists:dropwhile(fun (_X) -> random:uniform() > 0.7 end, Data),
 
-       %% lists:foreach(fun({X,Y}) -> eleveldb:put(Ref, X, Y, []) end, Data),
+        lists:foreach(fun({X,Y}) -> eleveldb:put(Ref, X, Y, []) end, Data),
 
         lists:foreach(
             fun(_) ->
@@ -109,6 +109,5 @@ batch_read_jump() ->
             lists:seq(1,1000)),
         ok
     after
-        ok
-        %%eleveldb:close(Ref)
+        eleveldb:close(Ref)
     end.
