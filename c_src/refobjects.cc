@@ -542,12 +542,28 @@ ItrObject::ReleaseReuseMove()
 
 bool LevelIteratorWrapper::acquire()
 {
-    return compare_and_swap(&m_ItrBusy, false, true);
+    bool r = compare_and_swap(&m_ItrBusy, false, true);
+    if (r)
+    {
+        m_CurrentData = 0;
+        m_GiveupFlag = false;
+    }
+    return r;
 }
 
 void LevelIteratorWrapper::release()
 {
     m_ItrBusy = false;
+}
+
+void LevelIteratorWrapper::give_up()
+{
+    m_GiveupFlag = true;
+}
+
+bool LevelIteratorWrapper::shouldGiveUp()
+{
+    return compare_and_swap(&m_GiveupFlag, true, false);
 }
 
 

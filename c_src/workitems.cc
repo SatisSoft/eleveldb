@@ -251,6 +251,10 @@ MoveTask::operator()()
         prepare_recycle();
         return work_result();
     }
+    if (m_ItrWrap->shouldGiveUp()) 
+    {
+        return work_result();
+    }
     
     assert(m_ItrWrap->m_CurrentData == 0);
     leveldb::Iterator* itr = m_ItrWrap->get();
@@ -266,7 +270,12 @@ MoveTask::operator()()
 
         case PREFETCH:
         case NEXT:
-        case PREV:  read_batch(itr); break;
+        case PREV:  
+            if (!read_batch(itr)) 
+            {
+                return work_result();
+            }
+        break;
 
         case SEEK:
         {
@@ -287,7 +296,7 @@ MoveTask::operator()()
 
 
     // who got back first, us or the erlang loop
-    if (compare_and_swap(&m_ItrWrap->m_HandoffAtomic, 0, 1))
+    if (PREFETCH == action && compare_and_swap(&m_ItrWrap->m_HandoffAtomic, 0, 1))
     {
         // this is prefetch of next iteration.  It returned faster than actual
         //  request to retrieve it.  Stop and wait for erlang to catch up.
@@ -324,12 +333,17 @@ MoveTask::operator()()
     return(work_result());
 }
 
-void MoveTask::read_batch(leveldb::Iterator* itr)
+bool MoveTask::read_batch(leveldb::Iterator* itr)
 {
     const bool keys_only = m_ItrWrap->m_KeysOnly;
     std::vector<ERL_NIF_TERM> list;
     list.reserve(batch_size);
-    for (int k = 0; k < batch_size && itr->Valid(); ++k) {
+    for (int k = 0; k < batch_size && itr->Valid() ; ++k) 
+    {
+        if (m_ItrWrap->shouldGiveUp()) 
+        {
+            return false;
+        }
 
         apply_action(itr);
         if (!itr->Valid())
@@ -348,6 +362,7 @@ void MoveTask::read_batch(leveldb::Iterator* itr)
         assert(m_ItrWrap->m_CurrentData == 0);
         //m_ItrWrap->m_CurrentData = 0;
     }
+    return true;
 }
 
 ERL_NIF_TERM MoveTask::extract(leveldb::Iterator* itr, const bool keys_only)

@@ -341,7 +341,7 @@ public:
     virtual void recycle();
 
 private:
-    void read_batch(leveldb::Iterator* itr);
+    bool read_batch(leveldb::Iterator* itr);
     void read_single(leveldb::Iterator* itr);
     ERL_NIF_TERM extract(leveldb::Iterator* itr, bool keys_only);
     void apply_action(leveldb::Iterator* itr);

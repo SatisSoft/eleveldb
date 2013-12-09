@@ -683,7 +683,7 @@ async_iterator_move(
 
     if(NULL==itr_ptr.get())
         return enif_make_badarg(env);
-
+            
     // Reuse ref from iterator creation
     const ERL_NIF_TERM& caller_ref = itr_ptr->m_Snapshot->itr_ref;
 
@@ -711,18 +711,16 @@ async_iterator_move(
     // case #1
     if (eleveldb::MoveTask::PREFETCH != action)
     {
+        itr_ptr->m_Iter->give_up();
         // current move object could still be in later stages of
         //  worker thread completion ... race condition ...don't reuse
         itr_ptr->ReleaseReuseMove();
-
+        
         submit_new_request=true;
         ret_term = enif_make_copy(env, itr_ptr->m_Snapshot->itr_ref);
 
         //turn off prefetch
         itr_ptr->m_Iter->m_PrefetchStarted=false;
-
-        // force reply to be a message
-        itr_ptr->m_Iter->m_HandoffAtomic=1;
     }   // if
 
     // case #2
