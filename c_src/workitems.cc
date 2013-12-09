@@ -216,7 +216,7 @@ private:
         
 };
 
-MoveTask::MoveTask(ErlNifEnv* _caller_env, ERL_NIF_TERM _caller_ref, LevelIteratorWrapper* IterWrap, 
+MoveTask::MoveTask(ErlNifEnv* _caller_env, ERL_NIF_TERM _caller_ref, LevelIteratorWrapper* IterWrap,
         action_t& _action, int _batch_size)
     : WorkTask(NULL, _caller_ref),
     m_ItrWrap(IterWrap), action(_action), batch_size(_batch_size), owns_iterator(false)
@@ -227,7 +227,7 @@ MoveTask::MoveTask(ErlNifEnv* _caller_env, ERL_NIF_TERM _caller_ref, LevelIterat
     owns_iterator = m_ItrWrap->acquire();
 }
 
-MoveTask::MoveTask(ErlNifEnv* _caller_env, ERL_NIF_TERM _caller_ref, LevelIteratorWrapper* IterWrap, 
+MoveTask::MoveTask(ErlNifEnv* _caller_env, ERL_NIF_TERM _caller_ref, LevelIteratorWrapper* IterWrap,
         action_t& _action, std::string& _seek_target)
     : WorkTask(NULL, _caller_ref),
     m_ItrWrap(IterWrap), action(_action),

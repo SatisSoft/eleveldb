@@ -324,13 +324,13 @@ public:
     // No seek target:
     MoveTask(ErlNifEnv *_caller_env, ERL_NIF_TERM _caller_ref,
              LevelIteratorWrapper * IterWrap, action_t& _action, int _batch_size);
-        
+
 
     // With seek target:
     MoveTask(ErlNifEnv *_caller_env, ERL_NIF_TERM _caller_ref,
              LevelIteratorWrapper * IterWrap, action_t& _action,
              std::string& _seek_target);
-        
+
     virtual ~MoveTask() {};
 
     virtual work_result operator()();
