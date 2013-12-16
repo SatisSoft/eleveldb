@@ -194,14 +194,17 @@ async_iterator_move(_CallerRef, _IterRef, _IterAction, _BatchSize) ->
                                                      {error, invalid_iterator} |
                                                      {error, iterator_closed}.
 iterator_move(_IRef, _Loc, BatchSize) ->
-    case async_iterator_move(undefined, _IRef, _Loc, BatchSize) of
-    Ref when is_reference(Ref) ->
-        receive
-            {Ref, X}                    -> X
-        end;
+    dyntrace:p(0, "iterator move"),
+    R = case async_iterator_move(undefined, _IRef, _Loc, BatchSize) of
+        Ref when is_reference(Ref) ->
+            receive
+                {Ref, X}                    -> X
+            end;
     {ok, _}=KeyVal -> KeyVal;
     ER -> ER
-    end.
+    end,
+    dyntrace:p(1, "iterator move"),
+    R.
 
 -spec iterator_move(itr_ref(), iterator_action()) -> {ok, {Key::binary(), Value::binary()}} |
                                                      {ok, Key::binary()} |
