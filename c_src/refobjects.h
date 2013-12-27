@@ -42,6 +42,8 @@
     #include "atoms.h"
 #endif
 
+#include "patterns.h"
+
 
 namespace eleveldb {
 
@@ -277,6 +279,7 @@ public:
     ERL_NIF_TERM m_CurrentData;               //!< list of KV or Keys gained from iterator after last (batch or not) move
     volatile bool m_ItrBusy;                  //!< flags that iterator is acuired by smb and cannot be used right now
     volatile bool m_GiveupFlag;
+    PatternsPersistentHolder m_Patterns;
 
     LevelIteratorWrapper(DbObject * DbPtr, LevelSnapshotWrapper * Snapshot,
                          leveldb::Iterator * Iterator, bool KeysOnly)
@@ -285,6 +288,11 @@ public:
         m_CurrentData(0), m_ItrBusy(false), m_GiveupFlag(false)
     {
     };
+    
+    void setPatterns(const Patterns& patterns)
+    {
+        m_Patterns.put(patterns);
+    }
 
     virtual ~LevelIteratorWrapper()
     {

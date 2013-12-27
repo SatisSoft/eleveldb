@@ -341,10 +341,15 @@ public:
     virtual void recycle();
 
 private:
-    bool read_batch(leveldb::Iterator* itr);
+    bool read_batch(PatternsWorkHolder& patterns, leveldb::Iterator* itr);
     void read_single(leveldb::Iterator* itr);
     ERL_NIF_TERM extract(leveldb::Iterator* itr, bool keys_only);
-    void apply_action(leveldb::Iterator* itr);
+    bool apply_action(PatternsWorkHolder& patterns, leveldb::Iterator* itr);
+    
+    void read_first(PatternsWorkHolder& patterns, leveldb::Iterator* itr);
+    void read_last(PatternsWorkHolder& patterns, leveldb::Iterator* itr);
+    void read_seek(PatternsWorkHolder& patterns, leveldb::Iterator* itr);
+    bool adjust_position(PatternsWorkHolder& patterns, leveldb::Iterator* itr);
 
 };  // class MoveTask
 

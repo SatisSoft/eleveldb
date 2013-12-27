@@ -29,6 +29,7 @@
          write/3,
          fold/4,
          fold/5,
+         fold_pattern/6,
          fold_keys/4,
          status/2,
          destroy/2,
@@ -42,6 +43,7 @@
          iterator/3,
          iterator_move/2,
          iterator_move/3,
+         iterator_move/4,
          iterator_close/1]).
 
 -export_type([db_ref/0,
@@ -182,20 +184,21 @@ iterator(Ref, Opts, keys_only) ->
     async_iterator(CallerRef, Ref, Opts, keys_only),
     ?WAIT_FOR_REPLY(CallerRef).
 
--spec async_iterator_move(reference(), itr_ref(), iterator_action(), integer()) -> {reference(), {ok, [{Key::binary(), Value::binary()}]}} |
+-spec async_iterator_move(reference(), itr_ref(), iterator_action(), integer(), list() | undefined) ->
+                                                                        {reference(), {ok, [{Key::binary(), Value::binary()}]}} |
                                                                         {reference(), {ok, [Key::binary()]}} |
                                                                         {reference(), {error, invalid_iterator}} |
                                                                         {reference(), {error, iterator_closed}}.
-async_iterator_move(_CallerRef, _IterRef, _IterAction, _BatchSize) ->
+async_iterator_move(_CallerRef, _IterRef, _IterAction, _BatchSize, _Patterns) ->
     erlang:nif_error({error, not_loaded}).
 
--spec iterator_move(itr_ref(), iterator_action(), integer()) -> {ok, [{Key::binary(), Value::binary()}]} |
+-spec iterator_move(itr_ref(), iterator_action(), integer(), list() | undefined) -> {ok, [{Key::binary(), NewPatterns::list(), Value::binary()}]} |
                                                      {ok, [Key::binary()]} |
                                                      {error, invalid_iterator} |
                                                      {error, iterator_closed}.
-iterator_move(_IRef, _Loc, BatchSize) ->
+iterator_move(_IRef, _Loc, BatchSize, Patterns) ->
     dyntrace:p(0, "iterator move"),
-    R = case async_iterator_move(undefined, _IRef, _Loc, BatchSize) of
+    R = case async_iterator_move(undefined, _IRef, _Loc, BatchSize, Patterns) of
         Ref when is_reference(Ref) ->
             receive
                 {Ref, X}                    -> X
@@ -206,13 +209,16 @@ iterator_move(_IRef, _Loc, BatchSize) ->
     dyntrace:p(1, "iterator move"),
     R.
 
+iterator_move(IRef, Loc, BatchSize) ->
+    iterator_move(IRef, Loc, BatchSize, undefined).
+
 -spec iterator_move(itr_ref(), iterator_action()) -> {ok, {Key::binary(), Value::binary()}} |
                                                      {ok, Key::binary()} |
                                                      {error, invalid_iterator} |
                                                      {error, iterator_closed}.
 
 iterator_move(IRef, Loc) ->
-    case iterator_move(IRef, Loc, 1) of
+    case iterator_move(IRef, Loc, 1, undefined) of
         {ok, [{K, V}]} ->
             {ok, K, V};
         {ok, [K]} ->
@@ -237,7 +243,11 @@ iterator_close_int(_IRef) ->
 -spec fold(db_ref(), fold_fun(), any(), read_options(), integer()) -> any().
 fold(Ref, Fun, Acc0, Opts, BatchSize) ->
     {ok, Itr} = iterator(Ref, Opts),
-    do_fold(Itr, Fun, Acc0, Opts, BatchSize).
+    do_fold(Itr, Fun, Acc0, Opts, BatchSize, undefined).
+
+fold_pattern(Ref, Fun, Acc0, Opts, BatchSize, Patterns) ->
+    {ok, Itr} = iterator(Ref, Opts),
+    do_fold(Itr, Fun, Acc0, Opts, BatchSize, Patterns).
 
 -spec fold(db_ref(), fold_fun(), any(), read_options()) -> any().
 fold(Ref, Fun, Acc0, Opts) ->
@@ -250,7 +260,7 @@ fold(Ref, Fun, Acc0, Opts) ->
 -spec fold_keys(db_ref(), fold_keys_fun(), any(), read_options()) -> any().
 fold_keys(Ref, Fun, Acc0, Opts) ->
     {ok, Itr} = iterator(Ref, Opts, keys_only),
-    do_fold(Itr, Fun, Acc0, Opts, 1).
+    do_fold(Itr, Fun, Acc0, Opts, 1, undefined).
 
 -spec status(db_ref(), Key::binary()) -> {ok, binary()} | error.
 status(Ref, Key) ->
@@ -342,14 +352,14 @@ add_open_defaults(Opts) ->
     end.
 
 
-do_fold(Itr, Fun, Acc0, Opts, BatchSize) ->
+do_fold(Itr, Fun, Acc0, Opts, BatchSize, Patterns) ->
     try
         %% Extract {first_key, binary()} and seek to that key as a starting
         %% point for the iteration. The folding function should use throw if it
         %% wishes to terminate before the end of the fold.
         Start = proplists:get_value(first_key, Opts, first),
         true = is_binary(Start) or (Start == first),
-        fold_loop(iterator_move(Itr, Start, BatchSize), Itr, Fun, Acc0, BatchSize)
+        fold_loop(iterator_move(Itr, Start, BatchSize, Patterns), Itr, Fun, Acc0, BatchSize)
     after
         iterator_close(Itr)
     end.
@@ -360,15 +370,17 @@ fold_loop({error, invalid_iterator}, _Itr, _Fun, Acc0, _) ->
     Acc0;
 
 fold_loop({ok, KVList}, Itr, Fun, Acc0, BatchSize) when is_list(KVList)->
-    {Next, FunNext, Acc} = case fold_chunk(Fun, Acc0, KVList) of
+    {Next, FunNext, Patterns, Acc} = case fold_chunk(Fun, Acc0, KVList) of
+                      {'next_key', Key, FunNext1, Patterns1, Acc1} ->
+                          {Key, FunNext1, Patterns1, Acc1};
                       {'next_key', Key, FunNext1, Acc1} ->
-                          {Key, FunNext1, Acc1};
+                          {Key, FunNext1, undefined, Acc1};
                       {'next_key', Key, Acc2} ->
-                          {Key, Fun, Acc2};
+                          {Key, Fun, undefined, Acc2};
                       SomeAcc ->
-                          {prefetch, Fun, SomeAcc}
+                          {prefetch, Fun, undefined, SomeAcc}
                   end,
-    fold_loop(eleveldb:iterator_move(Itr, Next, BatchSize), Itr, FunNext, Acc, BatchSize).
+    fold_loop(eleveldb:iterator_move(Itr, Next, BatchSize, Patterns), Itr, FunNext, Acc, BatchSize).
 
 fold_chunk(_Fun, Acc0, []) ->
     Acc0;
@@ -377,6 +389,8 @@ fold_chunk(Fun, Acc0, [H|Tail]) ->
         {'next_key', _Key, _Acc} = V->
             V;
         {'next_key', _Key,_FunNext, _Acc} = V->
+            V;
+        {'next_key', _Key,_FunNext,_NextPatterns, _Acc} = V->
             V;
         Acc ->
             fold_chunk(Fun, Acc, Tail)

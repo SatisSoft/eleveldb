@@ -53,6 +53,9 @@ prev_test() ->
       
       ?assertEqual([<<"cz">>, <<"by">>, <<"ax">>], eleveldb:fold(Ref, fun({K,V}, Acc) -> [<<K/binary, V/binary>>|Acc] end, [], [], 2)),
       ?assertEqual([<<"cz">>, <<"by">>, <<"ax">>], eleveldb:fold(Ref, fun({K,V}, Acc) -> [<<K/binary, V/binary>>|Acc] end, [], [], 20)),
+      ?assertEqual([<<"cz">>, <<"ax">>],
+                   eleveldb:fold_pattern(Ref, fun({K,V}, Acc) -> [<<K/binary, V/binary>>|Acc] end, [], [], 20,
+                   [{<<"a">>, <<"a">>}, {<<"c">>, <<"x">>}])),
       SmartFoldFun = fun
               ({K, V}, Acc) when length(Acc) =:= 1->
                   {next_key, <<"a">>, [<<K/binary, V/binary>>|Acc]};

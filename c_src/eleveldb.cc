@@ -74,7 +74,7 @@ static ErlNifFunc nif_funcs[] =
     {"async_iterator", 3, eleveldb::async_iterator},
     {"async_iterator", 4, eleveldb::async_iterator},
 
-    {"async_iterator_move", 4, eleveldb::async_iterator_move}
+    {"async_iterator_move", 5, eleveldb::async_iterator_move}
 };
 
 
@@ -668,6 +668,7 @@ async_iterator_move(
     const ERL_NIF_TERM& itr_handle_ref   = argv[1];
     const ERL_NIF_TERM& action_or_target = argv[2];
     const ERL_NIF_TERM& erl_batch_size   = argv[3];
+    const ERL_NIF_TERM& patterns         = argv[4];
     int batch_size;
     if (!enif_get_int(env, erl_batch_size, &batch_size))
     {
@@ -712,6 +713,7 @@ async_iterator_move(
     if (eleveldb::MoveTask::PREFETCH != action)
     {
         itr_ptr->m_Iter->give_up();
+        itr_ptr->m_Iter->setPatterns(Patterns(env, patterns));
         // current move object could still be in later stages of
         //  worker thread completion ... race condition ...don't reuse
         itr_ptr->ReleaseReuseMove();

@@ -232,7 +232,7 @@ MoveTask::MoveTask(ErlNifEnv* _caller_env, ERL_NIF_TERM _caller_ref, LevelIterat
     : WorkTask(NULL, _caller_ref),
     m_ItrWrap(IterWrap), action(_action),
     seek_target(_seek_target),
-owns_iterator(false)
+    owns_iterator(false)
 {
     // special case construction
     local_env_=NULL;
@@ -251,6 +251,7 @@ MoveTask::operator()()
         prepare_recycle();
         return work_result();
     }
+    PatternsWorkHolder patterns(m_ItrWrap->m_Patterns);
     if (m_ItrWrap->shouldGiveUp()) 
     {
         return work_result();
@@ -264,26 +265,27 @@ MoveTask::operator()()
 
     switch(action)
     {
-        case FIRST: itr->SeekToFirst(); read_single(itr); break;
+        case FIRST: 
+            read_first(patterns, itr);
+            break;
 
-        case LAST:  itr->SeekToLast();  read_single(itr); break;
+        case LAST:  
+            read_last(patterns, itr);
+            break;
 
+        case PREV:  
+            assert(patterns->is_null());
         case PREFETCH:
         case NEXT:
-        case PREV:  
-            if (!read_batch(itr)) 
+            if (!read_batch(patterns, itr)) 
             {
                 return work_result();
             }
-        break;
+            break;
 
         case SEEK:
-        {
-            leveldb::Slice key_slice(seek_target);
-            itr->Seek(key_slice);
-            read_single(itr);
+            read_seek(patterns, itr);
             break;
-        }   // case
 
         default:
             // JFW: note: *not* { ERROR, badarg() } here-- we want the exception:
@@ -333,7 +335,7 @@ MoveTask::operator()()
     return(work_result());
 }
 
-bool MoveTask::read_batch(leveldb::Iterator* itr)
+bool MoveTask::read_batch(PatternsWorkHolder& patterns, leveldb::Iterator* itr)
 {
     const bool keys_only = m_ItrWrap->m_KeysOnly;
     std::vector<ERL_NIF_TERM> list;
@@ -345,7 +347,11 @@ bool MoveTask::read_batch(leveldb::Iterator* itr)
             return false;
         }
 
-        apply_action(itr);
+        if (!apply_action(patterns, itr))
+        {
+            itr->SeekToLast();
+            itr->Next();
+        }
         if (!itr->Valid())
         {
             break;
@@ -396,13 +402,18 @@ void MoveTask::read_single(leveldb::Iterator* itr)
 
 }
 
-void MoveTask::apply_action(leveldb::Iterator* itr)
+bool MoveTask::apply_action(PatternsWorkHolder& patterns, leveldb::Iterator* itr)
 {
     switch (action) {
     case PREFETCH:
-    case NEXT:  itr->Next(); break;
-    case PREV:  itr->Prev(); break;
-    default: break;
+    case NEXT:  
+        itr->Next(); 
+        return adjust_position(patterns, itr);
+    case PREV:  
+        itr->Prev(); 
+        return true;
+    default: 
+        return false;
     }
 }
 
@@ -458,6 +469,103 @@ MoveTask::recycle()
     }   // else
 
 }   // MoveTask::recycle
+
+void MoveTask::read_first(PatternsWorkHolder& patterns, leveldb::Iterator* itr)
+{
+    if (!patterns->is_null())
+    {
+        const leveldb::Slice& start =patterns->first();
+        if (!start.empty())
+        {
+                itr->Seek(start);
+                if (adjust_position(patterns, itr)) 
+                {
+                    read_single(itr); 
+                }
+                else 
+                {
+                    m_ItrWrap->m_CurrentData = 0;
+                }
+        }
+        else
+        {
+            m_ItrWrap->m_CurrentData = 0;
+        }
+    }
+    else 
+    {
+        itr->SeekToFirst(); 
+        read_single(itr); 
+    }
+}
+
+void MoveTask::read_last(PatternsWorkHolder& patterns, leveldb::Iterator* itr)
+{
+    if (!patterns->is_null())
+    {
+        const leveldb::Slice& end = patterns->last();
+        if (!end.empty())
+        {
+                itr->Seek(end);
+                if (adjust_position(patterns, itr))
+                {
+                    read_single(itr); 
+                }
+                else 
+                {
+                    m_ItrWrap->m_CurrentData = 0;
+                }
+        }
+        else
+        {
+            m_ItrWrap->m_CurrentData = 0;
+        }
+    }
+    else 
+    {
+        itr->SeekToLast(); 
+        read_single(itr); 
+    }
+}
+
+void MoveTask::read_seek(PatternsWorkHolder& patterns, leveldb::Iterator* itr)
+{
+    leveldb::Slice key_slice(seek_target);
+            
+    itr->Seek(key_slice);
+    if (adjust_position(patterns, itr))
+    {
+        read_single(itr);
+    }
+    else
+    {
+        m_ItrWrap->m_CurrentData = 0;
+    }
+}
+
+bool MoveTask::adjust_position(PatternsWorkHolder& patterns, leveldb::Iterator* itr) 
+{
+    if (!patterns->is_null() && itr->Valid())
+    {
+        for(;;)
+        {
+            const leveldb::Slice& current = itr->key();
+            const leveldb::Slice& candidate = patterns->adjust_forward(current);
+            if (candidate.empty())
+            {
+                return false; //can't position
+            }
+            if (candidate.compare(current) == 0)
+            {
+                return true;
+            }
+            itr->Seek(candidate);
+        }
+        
+    }
+    return true;
+}
+
 
 
 
